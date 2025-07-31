@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DPPH 抗自由基試紙分析 (修正 CSV 亂碼問題)</title>
+    <!-- 載入 Tailwind CSS CDN，用於快速美觀的樣式設計 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 Inter 字體，提供良好的閱讀體驗 -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- 載入 Chart.js CDN，用於繪製圖表 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* 設定全域字體和背景顏色 */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* 淺灰色背景 */
+        }
+        /* 確保 canvas 響應式 */
+        canvas {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8 md:p-12 lg:p-16">
+    <!-- 主容器，置中並設定最大寬度、圓角和陰影 -->
+    <div class="max-w-4xl mx-auto bg-white p-6 sm:p-8 rounded-lg shadow-xl">
+        <h1 class="text-3xl sm:text-4xl font-bold text-center text-gray-800 mb-6">DPPH 抗自由基試紙分析 App</h1>
+        <p class="text-gray-600 text-center mb-8">請輸入各組的 CIE LAB (L, a, b*) 值，App 將自動計算結果。</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <!-- 輸入數據區塊 -->
+            <div class="bg-gray-50 p-5 rounded-lg shadow-inner">
+                <h2 class="text-2xl font-semibold text-gray-700 mb-4">輸入數據</h2>
+
+                <!-- 空白試紙組輸入欄位 -->
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">空白試紙組 (白色背景)</label>
+                    <div class="flex space-x-2">
+                        <input type="number" id="blankL" value="49.8" step="0.1" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="L">
+                        <input type="number" id="blankA" value="-1.6" step="0.1" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="a">
+                        <input type="number" id="blankB" value="3.2" step="0.1" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="b*">
+                    </div>
+                </div>
+
+                <!-- DPPH 紫色組輸入欄位 -->
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">DPPH 紫色組 (未還原)</label>
+                    <div class="flex space-x-2">
+                        <input type="number" id="dpphL" value="45.8" step="0.1" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="L">
+                        <input type="number" id="dpphA" value="2.3" step="0.1" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="a">
+                        <input type="number" id="dpphB" value="0.8" step="0.1" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" placeholder="b*">
+                    </div>
+                </div>
+
+                <!-- 樣品組輸入欄位 -->
+                <h3 class="text-xl font-medium text-gray-600 mb-3">樣品組</h3>
+                <div id="sampleGroups">
+                    <!-- 預設樣品 A 組 -->
+                    <div class="mb-3 flex items-center space-x-1 sample-row">
+                        <input type="text" value="樣品 A" class="sample-name-input shadow appearance-none border rounded w-16 py-2 px-2 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="樣品名稱">
+                        <input type="number" data-lab="L" value="41.8" step="0.1" class="sample-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="L">
+                        <input type="number" data-lab="A" value="2.6" step="0.1" class="sample-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="a">
+                        <input type="number" data-lab="B" value="4.1" step="0.1" class="sample-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="b*">
+                        <button onclick="removeSampleRow(this)" class="ml-1 bg-red-500 hover:bg-red-700 text-white font-bold py-1.5 px-1 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105">刪除</button>
+                    </div>
+                </div>
+                <!-- 新增/刪除樣品按鈕 -->
+                <div class="flex justify-end space-x-2 mt-4">
+                    <button onclick="addSampleRow()" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105">
+                        新增樣品
+                    </button>
+                    <button onclick="removeLastSampleRow()" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105">
+                        刪除最後一個樣品
+                    </button>
+                </div>
+
+                <!-- 維生素 C 標準品輸入欄位 -->
+                <h3 class="text-xl font-medium text-gray-600 mb-3 mt-6">維生素 C 標準品</h3>
+                <div id="vcStandards">
+                    <!-- VC 0.005 mg/mL -->
+                    <div class="mb-3 flex items-center space-x-1 vc-standard-row">
+                        <input type="number" value="0.005" step="0.001" class="vc-conc-input shadow appearance-none border rounded w-16 py-2 px-2 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="濃度 mg/mL">
+                        <input type="number" data-lab="L" value="44.3" step="0.1" class="vc-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="L">
+                        <input type="number" data-lab="A" value="2.8" step="0.1" class="vc-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="a">
+                        <input type="number" data-lab="B" value="2.3" step="0.1" class="vc-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="b*">
+                        <button onclick="removeStandardRow(this)" class="ml-1 bg-red-500 hover:bg-red-700 text-white font-bold py-1.5 px-1 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105">刪除</button>
+                    </div>
+                    <!-- VC 0.01 mg/mL -->
+                    <div class="mb-3 flex items-center space-x-1 vc-standard-row">
+                        <input type="number" value="0.01" step="0.001" class="vc-conc-input shadow appearance-none border rounded w-16 py-2 px-2 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="濃度 mg/mL">
+                        <input type="number" data-lab="L" value="41.8" step="0.1" class="vc-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="L">
+                        <input type="number" data-lab="A" value="2.6" step="0.1" class="vc-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="a">
+                        <input type="number" data-lab="B" value="4.1" step="0.1" class="vc-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="b*">
+                        <button onclick="removeStandardRow(this)" class="ml-1 bg-red-500 hover:bg-red-700 text-white font-bold py-1.5 px-1 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105">刪除</button>
+                    </div>
+                    <!-- VC 0.02 mg/mL -->
+                    <div class="mb-3 flex items-center space-x-1 vc-standard-row">
+                        <input type="number" value="0.02" step="0.001" class="vc-conc-input shadow appearance-none border rounded w-16 py-2 px-2 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="濃度 mg/mL">
+                        <input type="number" data-lab="L" value="40.0" step="0.1" class="vc-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="L">
+                        <input type="number" data-lab="A" value="3.7" step="0.1" class="vc-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="a">
+                        <input type="number" data-lab="B" value="3.9" step="0.1" class="vc-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="b*">
+                        <button onclick="removeStandardRow(this)" class="ml-1 bg-red-500 hover:bg-red-700 text-white font-bold py-1.5 px-1 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105">刪除</button>
+                    </div>
+                    <!-- VC 0.05 mg/mL -->
+                    <div class="mb-3 flex items-center space-x-1 vc-standard-row">
+                        <input type="number" value="0.05" step="0.001" class="vc-conc-input shadow appearance-none border rounded w-16 py-2 px-2 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="濃度 mg/mL">
+                        <input type="number" data-lab="L" value="38.5" step="0.1" class="vc-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="L">
+                        <input type="number" data-lab="A" value="2.4" step="0.1" class="vc-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="a">
+                        <input type="number" data-lab="B" value="6.7" step="0.1" class="vc-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="b*">
+                        <button onclick="removeStandardRow(this)" class="ml-1 bg-red-500 hover:bg-red-700 text-white font-bold py-1.5 px-1 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105">刪除</button>
+                    </div>
+                    <!-- VC 0.1 mg/mL -->
+                    <div class="mb-3 flex items-center space-x-1 vc-standard-row">
+                        <input type="number" value="0.1" step="0.001" class="vc-conc-input shadow appearance-none border rounded w-16 py-2 px-2 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="濃度 mg/mL">
+                        <input type="number" data-lab="L" value="37.6" step="0.1" class="vc-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="L">
+                        <input type="number" data-lab="A" value="2.3" step="0.1" class="vc-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="a">
+                        <input type="number" data-lab="B" value="5.4" step="0.1" class="vc-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="b*">
+                        <button onclick="removeStandardRow(this)" class="ml-1 bg-red-500 hover:bg-red-700 text-white font-bold py-1.5 px-1 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105">刪除</button>
+                    </div>
+                </div>
+                
+                <!-- 新增/刪除標準品按鈕 -->
+                <div class="flex justify-end space-x-2 mt-4">
+                    <button onclick="addStandardRow()" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105">
+                        新增標準品
+                    </button>
+                    <button onclick="removeLastStandardRow()" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105">
+                        刪除最後一個標準品
+                    </button>
+                </div>
+
+                <!-- 執行分析按鈕 -->
+                <button onclick="analyzeDPPH()" class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105 mt-6">
+                    執行分析
+                </button>
+                <!-- 下載結果按鈕 -->
+                <button onclick="exportToCsv()" class="w-full bg-purple-600 hover:bg-purple-800 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105 mt-4">
+                    下載結果為 Excel (CSV)
+                </button>
+            </div>
+
+            <!-- 分析結果區塊 -->
+            <div class="bg-gray-50 p-5 rounded-lg shadow-inner">
+                <h2 class="text-2xl font-semibold text-gray-700 mb-4">分析結果</h2>
+
+                <div id="results" class="space-y-4">
+                    <!-- Delta E 結果顯示 -->
+                    <div>
+                        <h3 class="text-xl font-medium text-gray-600 mb-2">各組 ΔE 色差值 (與 DPPH 紫色組比較)</h3>
+                        <ul id="deltaEResults" class="list-disc list-inside text-gray-800"></ul>
+                    </div>
+
+                    <!-- 校正後 Delta E 結果顯示 -->
+                    <div>
+                        <h3 class="text-xl font-medium text-gray-600 mb-2">校正後 ΔE 值 (以空白試紙組 ΔE 校正)</h3>
+                        <ul id="correctedDeltaEResults" class="list-disc list-inside text-gray-800"></ul>
+                    </div>
+
+                    <!-- DPPH 清除率結果顯示 -->
+                    <div>
+                        <h3 class="text-xl font-medium text-gray-600 mb-2">DPPH 清除率 (%)</h3>
+                        <ul id="scavengingRateResults" class="list-disc list-inside text-gray-800"></ul>
+                    </div>
+
+                    <!-- 檢量線詳細資訊顯示 -->
+                    <div>
+                        <h3 class="text-xl font-medium text-gray-600 mb-2">檢量線 (DPPH 清除率 vs. 維生素 C 濃度)</h3>
+
+                        <!-- 線性回歸結果與圖表 -->
+                        <div class="bg-white p-4 rounded-lg shadow mb-4">
+                            <h4 class="text-lg font-semibold text-gray-700 mb-2">線性回歸結果</h4>
+                            <p id="linearRegressionEquation" class="text-gray-800"></p>
+                            <p id="linearRSquared" class="text-gray-800"></p>
+                            <p id="linearRSquaredWarning" class="text-red-600 font-semibold"></p>
+                            <div class="mt-4">
+                                <canvas id="linearChart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- 4PL 回歸結果與圖表 -->
+                        <div class="bg-white p-4 rounded-lg shadow">
+                            <h4 class="text-lg font-semibold text-gray-700 mb-2">4PL 回歸結果</h4>
+                            <p id="fourPLRegressionEquation" class="text-gray-800"></p>
+                            <p id="fourPLRSquared" class="text-gray-800"></p>
+                            <p id="fourPLRSquaredWarning" class="text-red-600 font-semibold"></p>
+                            <div class="mt-4">
+                                <canvas id="fourPLChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 樣品維生素 C 當量值顯示 -->
+                    <div>
+                        <h3 class="text-xl font-medium text-gray-600 mb-2">樣品維生素 C 當量值</h3>
+                        <ul id="sampleVCEquivalents" class="list-disc list-inside text-gray-800"></ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局變量用於存儲 Chart 實例，以便在重新分析時銷毀舊圖表
+        let linearChartInstance = null;
+        let fourPLChartInstance = null;
+        // 全局變量用於存儲分析結果，以便匯出
+        let analysisResults = {};
+
+        /**
+         * 計算兩個 CIE LAB 顏色之間的 Delta E (色差)。
+         * 使用歐幾里得距離公式。
+         * @param {number} L1 - 第一個顏色的 L 值。
+         * @param {number} a1 - 第一個顏色的 a 值。
+         * @param {number} b1 - 第一個顏色的 b 值。
+         * @param {number} L2 - 第二個顏色的 L 值。
+         * @param {number} a2 - 第二個顏色的 a 值。
+         * @param {number} b2 - 第二個顏色的 b 值。
+         * @returns {number} Delta E 值。
+         */
+        function calculateDeltaE(L1, a1, b1, L2, a2, b2) {
+            const deltaL = L1 - L2;
+            const deltaA = a1 - a2;
+            const deltaB = b1 - b2;
+            return Math.sqrt(deltaL * deltaL + deltaA * deltaA + deltaB * deltaB);
+        }
+
+        /**
+         * 執行簡單線性回歸並計算 R-squared 值。
+         * 公式: y = mx + b
+         * @param {number[]} x - X 軸數據點 (自變數)。
+         * @param {number[]} y - Y 軸數據點 (因變數)。
+         * @returns {{m: number, b: number, rSquared: number}} 包含斜率 (m)、截距 (b) 和 R-squared 值的物件。
+         */
+        function linearRegression(x, y) {
+            const n = x.length;
+            let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, sumY2 = 0;
+
+            for (let i = 0; i < n; i++) {
+                sumX += x[i];
+                sumY += y[i];
+                sumXY += x[i] * y[i];
+                sumX2 += x[i] * x[i];
+                sumY2 += y[i] * y[i];
+            }
+
+            const numeratorM = (n * sumXY - sumX * sumY);
+            const denominatorM = (n * sumX2 - sumX * sumX);
+            const m = denominatorM === 0 ? 0 : numeratorM / denominatorM; // 斜率 (Slope)
+
+            const b = (sumY - m * sumX) / n; // Y 軸截距 (Y-intercept)
+
+            // 計算 R-squared
+            let ssTotal = 0;
+            let ssResidual = 0;
+            for (let i = 0; i < n; i++) {
+                const yPred = m * x[i] + b;
+                ssTotal += Math.pow(y[i] - (sumY / n), 2);
+                ssResidual += Math.pow(y[i] - yPred, 2);
+            }
+
+            let rSquared = 0;
+            if (ssTotal !== 0) {
+                rSquared = 1 - (ssResidual / ssTotal);
+            }
+            if (isNaN(rSquared) || rSquared < 0) rSquared = 0; // 處理無效的 R-squared
+
+            return { m, b, rSquared };
+        }
+
+        /**
+         * 四參數邏輯 (4PL) 模型函數。
+         * y = D + (A - D) / (1 + (x / C)^B)
+         * A: 下漸近線 (最低反應值)
+         * B: 希爾斜率 (曲線陡峭度)
+         * C: 拐點 (EC50/IC50，50% 反應時的 x 值)
+         * D: 上漸近線 (最高反應值)
+         * @param {number} x - 自變數 (濃度)。
+         * @param {number} A - 下漸近線。
+         * @param {number} B - 希爾斜率。
+         * @param {number} C - 拐點。
+         * @param {number} D - 上漸近線。
+         * @returns {number} 預測的 y 值。
+         */
+        function fourParameterLogistic(x, A, B, C, D) {
+            if (C === 0) return D; // 避免除以零
+            const term = Math.pow(x / C, B);
+            return D + (A - D) / (1 + term);
+        }
+
+        /**
+         * 計算四參數邏輯模型擬合的平方誤差和 (SSE)。
+         * @param {object} params - 包含 A, B, C, D 參數的物件。
+         * @param {number[]} xData - X 軸數據。
+         * @param {number[]} yData - Y 軸數據。
+         * @returns {number} 平方誤差和。
+         */
+        function calculateSSE_4PL(params, xData, yData) {
+            let sse = 0;
+            for (let i = 0; i < xData.length; i++) {
+                const yPred = fourParameterLogistic(xData[i], params.A, params.B, params.C, params.D);
+                sse += Math.pow(yData[i] - yPred, 2);
+            }
+            return sse;
+        }
+
+        /**
+         * 執行簡化的迭代優化來擬合四參數邏輯 (4PL) 模型。
+         * 注意：這是一個基礎的迭代方法，可能不如專業統計軟體中的演算法穩健或精確。
+         * @param {number[]} xData - X 軸數據點 (維生素 C 濃度)。
+         * @param {number[]} yData - Y 軸數據點 (DPPH 清除率)。
+         * @returns {{A: number, B: number, C: number, D: number, rSquared: number, fourPLFunction: function, inverseFourPLFunction: function}} 擬合參數、R-squared 值和 4PL 函數。
+         */
+        function fit4PL(xData, yData) {
+            // 初始參數猜測
+            // A: 下漸近線 (最低清除率，預期接近 0)
+            // D: 上漸近線 (最高清除率，預期接近 100)
+            // C: 拐點 (IC50，50% 反應時的 x 值)
+            // B: 希爾斜率 (曲線陡峭度，預期為正值)
+
+            let A = 0; // 假定最低清除率為 0%
+            let D = 100; // 假定最高清除率為 100%
+            let C = xData.length > 0 ? xData[Math.floor(xData.length / 2)] : 0.01; // 以中間濃度作為 IC50 的初始猜測
+            if (C === 0) C = 0.01; // 避免 C 初始值為 0
+            let B = 1.0; // 初始希爾斜率
+
+            // 迭代優化設置
+            const learningRate = 0.0005; // 學習率，調整每次迭代的步長
+            const numIterations = 50000; // 迭代次數
+            const paramStepFactor = 0.01; // 參數調整步長的因子
+
+            let params = { A, B, C, D };
+            let currentSSE = calculateSSE_4PL(params, xData, yData);
+
+            for (let iter = 0; iter < numIterations; iter++) {
+                let improved = false;
+                let bestParams = { ...params };
+                let bestSSE = currentSSE;
+
+                // 嘗試微調每個參數，並朝著減少 SSE 的方向移動
+                // A
+                let testA_plus = params.A + learningRate * paramStepFactor * (D - A);
+                let sse_A_plus = calculateSSE_4PL({ ...params, A: testA_plus }, xData, yData);
+                if (sse_A_plus < bestSSE) { bestParams.A = testA_plus; bestSSE = sse_A_plus; improved = true; }
+                let testA_minus = params.A - learningRate * paramStepFactor * (D - A);
+                let sse_A_minus = calculateSSE_4PL({ ...params, A: testA_minus }, xData, yData);
+                if (sse_A_minus < bestSSE) { bestParams.A = testA_minus; bestSSE = sse_A_minus; improved = true; }
+
+                // D
+                let testD_plus = params.D + learningRate * paramStepFactor * (D - A);
+                let sse_D_plus = calculateSSE_4PL({ ...params, D: testD_plus }, xData, yData);
+                if (sse_D_plus < bestSSE) { bestParams.D = testD_plus; bestSSE = sse_D_plus; improved = true; }
+                let testD_minus = params.D - learningRate * paramStepFactor * (D - A);
+                let sse_D_minus = calculateSSE_4PL({ ...params, D: testD_minus }, xData, yData);
+                if (sse_D_minus < bestSSE) { bestParams.D = testD_minus; bestSSE = sse_D_minus; improved = true; }
+
+                // C (IC50 應為正值)
+                let testC_plus = params.C + learningRate * paramStepFactor * params.C;
+                if (testC_plus < 1e-9) testC_plus = 1e-9; // 避免 C 過小或負值
+                let sse_C_plus = calculateSSE_4PL({ ...params, C: testC_plus }, xData, yData);
+                if (sse_C_plus < bestSSE) { bestParams.C = testC_plus; bestSSE = sse_C_plus; improved = true; }
+                let testC_minus = params.C - learningRate * paramStepFactor * params.C;
+                if (testC_minus < 1e-9) testC_minus = 1e-9; // 避免 C 過小或負值
+                let sse_C_minus = calculateSSE_4PL({ ...params, C: testC_minus }, xData, yData);
+                if (sse_C_minus < bestSSE) { bestParams.C = testC_minus; bestSSE = sse_C_minus; improved = true; }
+                
+                // B (希爾斜率，對於增加的曲線應為正值)
+                let testB_plus = params.B + learningRate * paramStepFactor;
+                if (testB_plus < 0.01) testB_plus = 0.01; // 避免 B 過小或負值，對於增加曲線
+                let sse_B_plus = calculateSSE_4PL({ ...params, B: testB_plus }, xData, yData);
+                if (sse_B_plus < bestSSE) { bestParams.B = testB_plus; bestSSE = sse_B_plus; improved = true; }
+                let testB_minus = params.B - learningRate * paramStepFactor;
+                if (testB_minus < 0.01) testB_minus = 0.01; // 避免 B 過小或負值，對於增加曲線
+                let sse_B_minus = calculateSSE_4PL({ ...params, B: testB_minus }, xData, yData);
+                if (sse_B_minus < bestSSE) { bestParams.B = testB_minus; bestSSE = sse_B_minus; improved = true; }
+
+                if (improved) {
+                    params = { ...bestParams };
+                    currentSSE = bestSSE;
+                } else {
+                    // 如果沒有改善，可能已收斂或達到局部最小值，可以提前結束
+                    // break;
+                }
+            }
+
+            // 計算 R-squared
+            let ssTotal = 0;
+            let meanY = yData.reduce((sum, val) => sum + val, 0) / yData.length;
+            for (let i = 0; i < yData.length; i++) {
+                ssTotal += Math.pow(yData[i] - meanY, 2);
+            }
+
+            let rSquared = 1 - (currentSSE / ssTotal);
+            if (isNaN(rSquared) || rSquared < 0) rSquared = 0; // 處理無效的 R-squared
+
+            /**
+             * 四參數邏輯 (4PL) 模型的反函數，用於從 y 值計算 x 值。
+             * x = C * ((A - D) / (y - D) - 1)^(1/B)
+             * @param {number} y - 因變數 (清除率)。
+             * @param {object} params - 包含 A, B, C, D 參數的物件。
+             * @returns {number} 預測的 x 值 (濃度)。
+             */
+            function inverseFourPL(y, params) {
+                const { A, B, C, D } = params;
+
+                if (y === D) return Infinity; // y 達到上漸近線時 x 趨近無限大
+                if (y === A) return 0; // y 達到下漸近線時 x 趨近 0
+
+                const numerator = A - D;
+                const denominator = y - D;
+
+                if (denominator === 0) return NaN; // 避免除以零
+
+                const base = numerator / denominator - 1;
+
+                // 確保 base 為正數，因為 B 通常為正且 1/B 可能不是整數
+                if (base <= 0) {
+                    // 如果 base 非正，且 B 不是奇數整數，則結果為複數或無效
+                    // 對於增加的曲線 (A < D, B > 0)，y 在 A 和 D 之間時 base 應為正
+                    // 如果 base <= 0，表示 y 值超出模型有效範圍，或擬合有問題
+                    console.warn("Inverse 4PL: Base for power is non-positive. Result might be invalid.", {y, A, B, C, D, base});
+                    return NaN;
+                }
+
+                // 避免 Math.pow(x, y) 中 x 為負數且 y 不是整數的情況
+                const power = 1 / B;
+                return C * Math.pow(base, power);
+            }
+
+            return { A: params.A, B: params.B, C: params.C, D: params.D, rSquared, fourPLFunction: fourParameterLogistic, inverseFourPLFunction: inverseFourPL };
+        }
+
+        /**
+         * 建立一個新的樣品數據輸入列。
+         * @param {string} name - 樣品名稱的預設值。
+         * @param {number} L - L 值的預設值。
+         * @param {number} a - a 值的預設值。
+         * @param {number} b - b* 值的預設值。
+         * @returns {HTMLElement} 新的樣品列 DOM 元素。
+         */
+        function createSampleRow(name = '', L = '', a = '', b = '') {
+            const div = document.createElement('div');
+            div.className = 'mb-3 flex items-center space-x-1 sample-row';
+            div.innerHTML = `
+                <input type="text" value="${name}" class="sample-name-input shadow appearance-none border rounded w-16 py-2 px-2 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="樣品名稱">
+                <input type="number" data-lab="L" value="${L}" step="0.1" class="sample-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="L">
+                <input type="number" data-lab="A" value="${a}" step="0.1" class="sample-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="a">
+                <input type="number" data-lab="B" value="${b}" step="0.1" class="sample-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="b*">
+                <button onclick="removeSampleRow(this)" class="ml-1 bg-red-500 hover:bg-red-700 text-white font-bold py-1.5 px-1 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105">刪除</button>
+            `;
+            return div;
+        }
+
+        /**
+         * 新增一個樣品數據輸入列。
+         */
+        function addSampleRow() {
+            const sampleGroupsDiv = document.getElementById('sampleGroups');
+            sampleGroupsDiv.appendChild(createSampleRow());
+        }
+
+        /**
+         * 刪除指定的樣品數據輸入列。
+         * @param {HTMLElement} buttonElement - 觸發刪除的按鈕元素。
+         */
+        function removeSampleRow(buttonElement) {
+            const sampleGroupsDiv = document.getElementById('sampleGroups');
+            // 確保至少保留一個樣品
+            if (sampleGroupsDiv.children.length > 0) {
+                const rowToRemove = buttonElement.closest('.sample-row');
+                if (rowToRemove) {
+                    sampleGroupsDiv.removeChild(rowToRemove);
+                }
+            } else {
+                showMessageBox('至少需要保留一個樣品數據。');
+            }
+        }
+
+        /**
+         * 刪除最後一個樣品數據輸入列。
+         */
+        function removeLastSampleRow() {
+            const sampleGroupsDiv = document.getElementById('sampleGroups');
+            // 確保至少保留一個樣品
+            if (sampleGroupsDiv.children.length > 0) {
+                sampleGroupsDiv.removeChild(sampleGroupsDiv.lastElementChild);
+            } else {
+                showMessageBox('至少需要保留一個樣品數據。');
+            }
+        }
+
+        /**
+         * 建立一個新的維生素 C 標準品數據輸入列。
+         * @returns {HTMLElement} 新的標準品列 DOM 元素。
+         */
+        function createStandardRow() {
+            const div = document.createElement('div');
+            div.className = 'mb-3 flex items-center space-x-1 vc-standard-row';
+            div.innerHTML = `
+                <input type="number" value="" step="0.001" class="vc-conc-input shadow appearance-none border rounded w-16 py-2 px-2 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="濃度 mg/mL">
+                <input type="number" data-lab="L" value="" step="0.1" class="vc-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="L">
+                <input type="number" data-lab="A" value="" step="0.1" class="vc-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="a">
+                <input type="number" data-lab="B" value="" step="0.1" class="vc-lab-input shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 text-sm leading-tight focus:outline-none focus:shadow-outline" placeholder="b*">
+                <button onclick="removeStandardRow(this)" class="ml-1 bg-red-500 hover:bg-red-700 text-white font-bold py-1.5 px-1 rounded-lg focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:scale-105">刪除</button>
+            `;
+            return div;
+        }
+
+        /**
+         * 新增一個維生素 C 標準品數據輸入列。
+         */
+        function addStandardRow() {
+            const vcStandardsDiv = document.getElementById('vcStandards');
+            vcStandardsDiv.appendChild(createStandardRow());
+        }
+
+        /**
+         * 刪除指定的維生素 C 標準品數據輸入列。
+         * @param {HTMLElement} buttonElement - 觸發刪除的按鈕元素。
+         */
+        function removeStandardRow(buttonElement) {
+            const vcStandardsDiv = document.getElementById('vcStandards');
+            // 確保至少保留兩個標準品，以便回歸
+            if (vcStandardsDiv.children.length > 2) {
+                const rowToRemove = buttonElement.closest('.vc-standard-row');
+                if (rowToRemove) {
+                    vcStandardsDiv.removeChild(rowToRemove);
+                }
+            } else {
+                showMessageBox('至少需要保留兩個標準品數據才能進行回歸分析。');
+            }
+        }
+
+        /**
+         * 刪除最後一個維生素 C 標準品數據輸入列。
+         */
+        function removeLastStandardRow() {
+            const vcStandardsDiv = document.getElementById('vcStandards');
+            // 確保至少保留兩個標準品，以便回歸
+            if (vcStandardsDiv.children.length > 2) {
+                vcStandardsDiv.removeChild(vcStandardsDiv.lastElementChild);
+            } else {
+                showMessageBox('至少需要保留兩個標準品數據才能進行回歸分析。');
+            }
+        }
+
+        /**
+         * 顯示自定義訊息框。
+         * @param {string} message - 要顯示的訊息。
+         */
+        function showMessageBox(message) {
+            let messageBox = document.getElementById('customMessageBox');
+            if (!messageBox) {
+                messageBox = document.createElement('div');
+                messageBox.id = 'customMessageBox';
+                messageBox.className = 'fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 hidden';
+                messageBox.innerHTML = `
+                    <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full text-center">
+                        <p class="text-gray-800 text-lg mb-4">${message}</p>
+                        <button onclick="closeMessageBox()" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
+                            確定
+                        </button>
+                    </div>
+                `;
+                document.body.appendChild(messageBox);
+            } else {
+                messageBox.querySelector('p').innerText = message;
+            }
+            messageBox.classList.remove('hidden');
+        }
+
+        /**
+         * 關閉自定義訊息框。
+         */
+        function closeMessageBox() {
+            const messageBox = document.getElementById('customMessageBox');
+            if (messageBox) {
+                messageBox.classList.add('hidden');
+            }
+        }
+
+        /**
+         * 繪製線性回歸圖表。
+         * @param {HTMLElement} canvasElement - Canvas DOM 元素。
+         * @param {Array<Object>} dataPoints - 原始數據點 {x, y}。
+         * @param {Object} linearRegParams - 線性回歸參數 {m, b}。
+         * @param {number} maxConc - 標準品最高濃度。
+         */
+        function drawLinearChart(canvasElement, dataPoints, linearRegParams, maxConc) {
+            if (linearChartInstance) {
+                linearChartInstance.destroy(); // 銷毀舊圖表實例
+            }
+
+            const ctx = canvasElement.getContext('2d');
+            
+            // 獲取數據點的 x 範圍
+            const minX = Math.min(...dataPoints.map(p => p.x));
+            const maxX = maxConc * 1.1; // X軸最高值為最高濃度*1.1
+
+            // 生成回歸線上的點
+            const linePoints = [];
+            // 在數據範圍內生成更多點以平滑曲線
+            for (let i = 0; i < 100; i++) {
+                const x = minX + ((maxX - minX) / 99) * i;
+                const y = linearRegParams.m * x + linearRegParams.b;
+                linePoints.push({ x, y });
+            }
+
+            linearChartInstance = new Chart(ctx, {
+                type: 'scatter', // 使用散點圖類型
+                data: {
+                    datasets: [
+                        {
+                            label: '標準品數據',
+                            data: dataPoints,
+                            backgroundColor: 'rgba(75, 192, 192, 0.8)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            pointRadius: 5,
+                        },
+                        {
+                            label: '線性回歸線',
+                            data: linePoints,
+                            type: 'line', // 設置為線圖類型
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                            fill: false,
+                            pointRadius: 0, // 不顯示線上的點
+                            borderWidth: 2,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    aspectRatio: 1, // 將長寬比設為 1:1，使圖表更高
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: '線性回歸檢量線',
+                            font: { size: 16 }
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top',
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            title: {
+                                display: true,
+                                text: '維生素 C 濃度 (mg/mL)'
+                            },
+                            min: 0, // 確保 x 軸從 0 開始
+                            max: maxX, // 設定 X 軸最高值
+                            ticks: {
+                                callback: function(value, index, values) {
+                                    // 隱藏最高值標籤
+                                    if (index === values.length - 1 && value !== 0) {
+                                        return '';
+                                    }
+                                    return value;
+                                }
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'DPPH 清除率 (%)'
+                            },
+                            min: 0, // 確保 y 軸從 0 開始
+                            max: 120, // 設定 Y 軸最高值為 120%
+                            ticks: {
+                                callback: function(value, index, values) {
+                                    // 隱藏最高值標籤
+                                    if (index === values.length - 1 && value !== 0) {
+                                        return '';
+                                    }
+                                    return value;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        /**
+         * 繪製 4PL 回歸圖表。
+         * @param {HTMLElement} canvasElement - Canvas DOM 元素。
+         * @param {Array<Object>} dataPoints - 原始數據點 {x, y}。
+         * @param {Object} fourPLRegParams - 4PL 回歸參數 {A, B, C, D}。
+         * @param {number} maxConc - 標準品最高濃度。
+         */
+        function drawFourPLChart(canvasElement, dataPoints, fourPLRegParams, maxConc) {
+            if (fourPLChartInstance) {
+                fourPLChartInstance.destroy(); // 銷毀舊圖表實例
+            }
+
+            const ctx = canvasElement.getContext('2d');
+
+            // 獲取數據點的 x 範圍
+            const minX = Math.min(...dataPoints.map(p => p.x));
+            const maxX = maxConc * 1.1; // X軸最高值為最高濃度*1.1
+
+            // 生成 4PL 曲線上的點
+            const curvePoints = [];
+            // 在數據範圍內生成更多點以平滑曲線
+            for (let i = 0; i < 100; i++) {
+                const x = minX + ((maxX - minX) / 99) * i;
+                const y = fourParameterLogistic(x, fourPLRegParams.A, fourPLRegParams.B, fourPLRegParams.C, fourPLRegParams.D);
+                curvePoints.push({ x, y });
+            }
+
+            fourPLChartInstance = new Chart(ctx, {
+                type: 'scatter', // 使用散點圖類型
+                data: {
+                    datasets: [
+                        {
+                            label: '標準品數據',
+                            data: dataPoints,
+                            backgroundColor: 'rgba(75, 192, 192, 0.8)',
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            pointRadius: 5,
+                        },
+                        {
+                            label: '4PL 回歸曲線',
+                            data: curvePoints,
+                            type: 'line', // 設置為線圖類型
+                            borderColor: 'rgba(153, 102, 255, 1)',
+                            backgroundColor: 'rgba(153, 102, 255, 0.2)',
+                            fill: false,
+                            pointRadius: 0, // 不顯示線上的點
+                            borderWidth: 2,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    aspectRatio: 1, // 將長寬比設為 1:1，使圖表更高
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: '4PL 回歸檢量線',
+                            font: { size: 16 }
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top',
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            title: {
+                                display: true,
+                                text: '維生素 C 濃度 (mg/mL)'
+                            },
+                            min: 0, // 確保 x 軸從 0 開始
+                            max: maxX, // 設定 X 軸最高值
+                            ticks: {
+                                callback: function(value, index, values) {
+                                    // 隱藏最高值標籤
+                                    if (index === values.length - 1 && value !== 0) {
+                                        return '';
+                                    }
+                                    return value;
+                                }
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'DPPH 清除率 (%)'
+                            },
+                            min: 0, // 確保 y 軸從 0 開始
+                            max: 120, // 設定 Y 軸最高值為 120%
+                            ticks: {
+                                callback: function(value, index, values) {
+                                    // 隱藏最高值標籤
+                                    if (index === values.length - 1 && value !== 0) {
+                                        return '';
+                                    }
+                                    return value;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+
+        /**
+         * 執行 DPPH 抗自由基試紙分析的主要函數。
+         * 獲取輸入值，執行所有計算，並更新 UI。
+         */
+        function analyzeDPPH() {
+            // 重置 analysisResults
+            analysisResults = {};
+
+            // 獲取各組的 CIE LAB 輸入值
+            const blankL = parseFloat(document.getElementById('blankL').value);
+            const blankA = parseFloat(document.getElementById('blankA').value);
+            const blankB = parseFloat(document.getElementById('blankB').value);
+
+            const dpphL = parseFloat(document.getElementById('dpphL').value);
+            const dpphA = parseFloat(document.getElementById('dpphA').value);
+            const dpphB = parseFloat(document.getElementById('dpphB').value);
+
+            // 儲存原始輸入數據
+            analysisResults.rawInputs = {
+                blank: { L: blankL, a: blankA, b: blankB },
+                dpph: { L: dpphL, a: dpphA, b: dpphB }
+            };
+
+            // 獲取樣品組的輸入值
+            const samples = [];
+            document.querySelectorAll('#sampleGroups .sample-row').forEach(row => {
+                const nameInput = row.querySelector('.sample-name-input');
+                const LInput = row.querySelector('.sample-lab-input[data-lab="L"]');
+                const AInput = row.querySelector('.sample-lab-input[data-lab="A"]');
+                const BInput = row.querySelector('.sample-lab-input[data-lab="B"]');
+
+                const name = nameInput.value.trim();
+                const L = parseFloat(LInput.value);
+                const a = parseFloat(AInput.value);
+                const b = parseFloat(BInput.value);
+
+                // 檢查輸入是否有效
+                if (!name || isNaN(L) || isNaN(a) || isNaN(b)) {
+                    showMessageBox('請檢查所有樣品的名稱和 CIE LAB 值是否為有效輸入。');
+                    // 清空結果並終止分析
+                    document.getElementById('deltaEResults').innerHTML = '';
+                    document.getElementById('correctedDeltaEResults').innerHTML = '';
+                    document.getElementById('scavengingRateResults').innerHTML = '';
+                    document.getElementById('linearRegressionEquation').innerText = '';
+                    document.getElementById('linearRSquared').innerText = '';
+                    document.getElementById('linearRSquaredWarning').innerText = '';
+                    document.getElementById('fourPLRegressionEquation').innerText = '';
+                    document.getElementById('fourPLRSquared').innerText = '';
+                    document.getElementById('fourPLRSquaredWarning').innerText = '';
+                    document.getElementById('sampleVCEquivalents').innerHTML = '';
+                    if (linearChartInstance) linearChartInstance.destroy();
+                    if (fourPLChartInstance) fourPLChartInstance.destroy();
+                    return; 
+                }
+                samples.push({ name, L, a, b });
+            });
+            analysisResults.samples = samples; // 儲存樣品原始數據
+
+            // 如果沒有樣品數據，顯示警告並清空結果
+            if (samples.length === 0) {
+                showMessageBox('請至少輸入一個樣品數據進行分析。');
+                document.getElementById('deltaEResults').innerHTML = '';
+                document.getElementById('correctedDeltaEResults').innerHTML = '';
+                document.getElementById('scavengingRateResults').innerHTML = '';
+                document.getElementById('linearRegressionEquation').innerText = '';
+                document.getElementById('linearRSquared').innerText = '';
+                document.getElementById('linearRSquaredWarning').innerText = '';
+                document.getElementById('fourPLRegressionEquation').innerText = '';
+                document.getElementById('fourPLRSquared').innerText = '';
+                document.getElementById('fourPLRSquaredWarning').innerText = '';
+                document.getElementById('sampleVCEquivalents').innerHTML = '';
+                // 清空圖表
+                if (linearChartInstance) linearChartInstance.destroy();
+                if (fourPLChartInstance) fourPLChartInstance.destroy();
+                return;
+            }
+
+
+            // 獲取維生素 C 標準品的輸入值
+            const vcStandards = [];
+            document.querySelectorAll('#vcStandards .vc-standard-row').forEach(row => {
+                const concInput = row.querySelector('.vc-conc-input');
+                const LInput = row.querySelector('.vc-lab-input[data-lab="L"]');
+                const AInput = row.querySelector('.vc-lab-input[data-lab="A"]');
+                const BInput = row.querySelector('.vc-lab-input[data-lab="B"]');
+
+                const conc = parseFloat(concInput.value);
+                const L = parseFloat(LInput.value);
+                const a = parseFloat(AInput.value);
+                const b = parseFloat(BInput.value);
+
+                // 檢查輸入是否有效
+                if (isNaN(conc) || isNaN(L) || isNaN(a) || isNaN(b) || conc < 0) {
+                    showMessageBox('請檢查所有維生素 C 標準品的濃度和 CIE LAB 值是否為有效數字，且濃度不能為負數。');
+                    // 清空結果並終止分析
+                    document.getElementById('deltaEResults').innerHTML = '';
+                    document.getElementById('correctedDeltaEResults').innerHTML = '';
+                    document.getElementById('scavengingRateResults').innerHTML = '';
+                    document.getElementById('linearRegressionEquation').innerText = '';
+                    document.getElementById('linearRSquared').innerText = '';
+                    document.getElementById('linearRSquaredWarning').innerText = '';
+                    document.getElementById('fourPLRegressionEquation').innerText = '';
+                    document.getElementById('fourPLRSquared').innerText = '';
+                    document.getElementById('fourPLRSquaredWarning').innerText = '';
+                    document.getElementById('sampleVCEquivalents').innerHTML = '';
+                    if (linearChartInstance) linearChartInstance.destroy();
+                    if (fourPLChartInstance) fourPLChartInstance.destroy();
+                    return;
+                }
+                vcStandards.push({ conc, L, a, b });
+            });
+            analysisResults.vcStandards = vcStandards; // 儲存標準品原始數據
+
+            // 確保有足夠的標準品進行回歸
+            if (vcStandards.length < 2) {
+                showMessageBox('至少需要兩個維生素 C 標準品數據才能進行回歸分析。');
+                // 清空圖表
+                if (linearChartInstance) linearChartInstance.destroy();
+                if (fourPLChartInstance) fourPLChartInstance.destroy();
+                return;
+            }
+
+            // 將 DPPH 紫色組設為 Delta E 計算的參考點
+            const dpphRef = { L: dpphL, a: dpphA, b: dpphB };
+
+            // --- 1. 計算各組的 ΔE 色差值 (與 DPPH 紫色組比較) ---
+            const deltaEResultsDisplay = []; // 用於顯示在 UI 上
+            const deltaE_Blank = calculateDeltaE(blankL, blankA, blankB, dpphRef.L, dpphRef.a, dpphRef.b);
+            deltaEResultsDisplay.push({ name: '空白試紙組', value: deltaE_Blank });
+            
+            const deltaE_DPPH = calculateDeltaE(dpphL, dpphA, dpphB, dpphRef.L, dpphRef.a, dpphRef.b);
+            deltaEResultsDisplay.push({ name: 'DPPH 紫色組', value: deltaE_DPPH }); // 理論上應為 0
+
+            samples.forEach(sample => {
+                const deltaE = calculateDeltaE(sample.L, sample.a, sample.b, dpphRef.L, dpphRef.a, dpphRef.b);
+                deltaEResultsDisplay.push({ name: `${sample.name} 組`, value: deltaE });
+                sample.deltaE = deltaE; // 儲存以供後續使用
+            });
+            
+            const vcDeltaEs = {}; // 儲存維生素 C 標準品的 Delta E
+            vcStandards.forEach(vc => {
+                const deltaE = calculateDeltaE(vc.L, vc.a, vc.b, dpphRef.L, dpphRef.a, dpphRef.b);
+                vcDeltaEs[vc.conc] = deltaE;
+                deltaEResultsDisplay.push({ name: `維生素 C ${vc.conc} mg/mL`, value: deltaE });
+                vc.deltaE = deltaE; // 儲存以供後續使用
+            });
+            analysisResults.deltaEValues = deltaEResultsDisplay; // 儲存 Delta E 結果
+
+            // 顯示 Delta E 結果到 UI
+            const deltaEResultsUl = document.getElementById('deltaEResults');
+            deltaEResultsUl.innerHTML = '';
+            deltaEResultsDisplay.forEach(res => {
+                deltaEResultsUl.innerHTML += `<li>${res.name}: ${res.value.toFixed(3)}</li>`;
+            });
+
+            // --- 2. 計算校正後 ΔE 值 (以空白試紙組 ΔE 校正) ---
+            const correctedDeltaEResultsDisplay = []; // 用於顯示在 UI 上
+            
+            // 檢查空白試紙組的 Delta E 是否為零，避免除以零錯誤
+            if (deltaE_Blank === 0) {
+                 showMessageBox('錯誤：空白試紙組的 ΔE 為零，無法進行校正。請檢查輸入數據。');
+                 document.getElementById('correctedDeltaEResults').innerHTML = '';
+                 document.getElementById('scavengingRateResults').innerHTML = '';
+                 document.getElementById('linearRegressionEquation').innerText = '';
+                 document.getElementById('linearRSquared').innerText = '';
+                 document.getElementById('linearRSquaredWarning').innerText = '';
+                 document.getElementById('fourPLRegressionEquation').innerText = '';
+                 document.getElementById('fourPLRSquared').innerText = '';
+                 document.getElementById('fourPLRSquaredWarning').innerText = '';
+                 document.getElementById('sampleVCEquivalents').innerHTML = '';
+                 // 清空圖表
+                 if (linearChartInstance) linearChartInstance.destroy();
+                 if (fourPLChartInstance) fourPLChartInstance.destroy();
+                 return;
+            }
+
+            const correctedDeltaE_Blank = deltaE_Blank / deltaE_Blank; // 理論上應為 1
+            correctedDeltaEResultsDisplay.push({ name: '空白試紙組', value: correctedDeltaE_Blank });
+
+            const correctedDeltaE_DPPH = deltaE_DPPH / deltaE_Blank; // 理論上應為 0
+            correctedDeltaEResultsDisplay.push({ name: 'DPPH 紫色組', value: correctedDeltaE_DPPH });
+
+            samples.forEach(sample => {
+                const correctedDeltaE = sample.deltaE / deltaE_Blank;
+                correctedDeltaEResultsDisplay.push({ name: `${sample.name} 組`, value: correctedDeltaE });
+                sample.correctedDeltaE = correctedDeltaE; // 儲存以供後續使用
+            });
+
+            const vcCorrectedDeltaEs = {}; // 儲存維生素 C 標準品的校正後 Delta E
+            vcStandards.forEach(vc => {
+                const correctedDeltaE = vcDeltaEs[vc.conc] / deltaE_Blank;
+                vcCorrectedDeltaEs[vc.conc] = correctedDeltaE;
+                correctedDeltaEResultsDisplay.push({ name: `維生素 C ${vc.conc} mg/mL`, value: correctedDeltaE });
+                vc.correctedDeltaE = correctedDeltaE; // 儲存以供後續使用
+            });
+            analysisResults.correctedDeltaEValues = correctedDeltaEResultsDisplay; // 儲存校正後 Delta E 結果
+
+            // 顯示校正後 Delta E 結果到 UI
+            const correctedDeltaEResultsUl = document.getElementById('correctedDeltaEResults');
+            correctedDeltaEResultsUl.innerHTML = '';
+            correctedDeltaEResultsDisplay.forEach(res => {
+                correctedDeltaEResultsUl.innerHTML += `<li>${res.name}: ${res.value.toFixed(3)}</li>`;
+            });
+
+            // --- 3. 計算 DPPH 清除率 (%) ---
+            const scavengingRateResultsDisplay = []; // 用於顯示在 UI 上
+            // 以 0.1 mg/mL 維生素 C 組的校正 ΔE 為 100% 清除率的基準
+            // 需要找到 0.1 mg/mL 的數據，如果不存在則使用最高濃度作為參考
+            let referenceConc = 0.1;
+            let correctedDeltaE_VC_Reference = vcCorrectedDeltaEs[referenceConc];
+
+            // 如果沒有 0.1 mg/mL 的數據，則找最大的濃度作為參考
+            if (correctedDeltaE_VC_Reference === undefined || correctedDeltaE_VC_Reference === 0) {
+                const maxConcVC = vcStandards.reduce((max, vc) => Math.max(max, vc.conc), 0);
+                if (maxConcVC > 0) {
+                    referenceConc = maxConcVC;
+                    correctedDeltaE_VC_Reference = vcCorrectedDeltaEs[referenceConc];
+                }
+            }
+
+            // 檢查參考組的校正 ΔE 是否為零，避免除以零錯誤
+            if (correctedDeltaE_VC_Reference === undefined || correctedDeltaE_VC_Reference === 0) {
+                 showMessageBox(`錯誤：用於計算清除率的參考維生素 C 組（${referenceConc} mg/mL）的校正 ΔE 為零或不存在。請檢查輸入數據。`);
+                 document.getElementById('scavengingRateResults').innerHTML = '';
+                 document.getElementById('linearRegressionEquation').innerText = '';
+                 document.getElementById('linearRSquared').innerText = '';
+                 document.getElementById('linearRSquaredWarning').innerText = '';
+                 document.getElementById('fourPLRegressionEquation').innerText = '';
+                 document.getElementById('fourPLRSquared').innerText = '';
+                 document.getElementById('fourPLRSquaredWarning').innerText = '';
+                 document.getElementById('sampleVCEquivalents').innerHTML = '';
+                 // 清空圖表
+                 if (linearChartInstance) linearChartInstance.destroy();
+                 if (fourPLChartInstance) fourPLChartInstance.destroy();
+                 return;
+            }
+
+            const scavengingRate_Blank = (correctedDeltaE_Blank / correctedDeltaE_VC_Reference) * 100;
+            scavengingRateResultsDisplay.push({ name: '空白試紙組', value: scavengingRate_Blank });
+
+            const scavengingRate_DPPH = (correctedDeltaE_DPPH / correctedDeltaE_VC_Reference) * 100;
+            scavengingRateResultsDisplay.push({ name: 'DPPH 紫色組', value: scavengingRate_DPPH });
+
+            samples.forEach(sample => {
+                const scavengingRate = (sample.correctedDeltaE / correctedDeltaE_VC_Reference) * 100;
+                scavengingRateResultsDisplay.push({ name: `${sample.name} 組`, value: scavengingRate });
+                sample.scavengingRate = scavengingRate; // 儲存以供後續使用
+            });
+
+            const vcScavengingRates = {}; // 儲存維生素 C 標準品的清除率
+            vcStandards.forEach(vc => {
+                const scavengingRate = (vcCorrectedDeltaEs[vc.conc] / correctedDeltaE_VC_Reference) * 100;
+                vcScavengingRates[vc.conc] = scavengingRate;
+                scavengingRateResultsDisplay.push({ name: `維生素 C ${vc.conc} mg/mL`, value: scavengingRate });
+                vc.scavengingRate = scavengingRate; // 儲存以供後續使用
+            });
+            analysisResults.scavengingRates = scavengingRateResultsDisplay; // 儲存清除率結果
+
+            // 顯示清除率結果到 UI
+            const scavengingRateResultsUl = document.getElementById('scavengingRateResults');
+            scavengingRateResultsUl.innerHTML = '';
+            scavengingRateResultsDisplay.forEach(res => {
+                scavengingRateResultsUl.innerHTML += `<li>${res.name}: ${res.value.toFixed(3)} %</li>`;
+            });
+
+            // --- 4. 建立檢量線並計算回歸方程式與相關係數 (R²) ---
+            // X 值為維生素 C 濃度，Y 值為對應的清除率
+            const xValues = vcStandards.map(vc => vc.conc);
+            const yValues = vcStandards.map(vc => vc.scavengingRate);
+
+            // 準備 Chart.js 的數據點格式
+            const chartDataPoints = xValues.map((x, i) => ({ x: x, y: yValues[i] }));
+            
+            // 獲取標準品最高濃度，用於 X 軸最大值設定
+            const maxConc = xValues.length > 0 ? Math.max(...xValues) : 0.1;
+
+
+            // 執行線性回歸
+            const linearReg = linearRegression(xValues, yValues);
+            document.getElementById('linearRegressionEquation').innerText = `回歸方程式: y = ${linearReg.m.toFixed(4)}x + ${linearReg.b.toFixed(4)}`;
+            document.getElementById('linearRSquared').innerText = `相關係數 (R²): ${linearReg.rSquared.toFixed(4)}`;
+            const linearRSquaredWarning = document.getElementById('linearRSquaredWarning');
+            if (linearReg.rSquared < 0.95) {
+                linearRSquaredWarning.innerText = '警告：相關係數 R² 低於 0.95，線性檢量線可能不適用。';
+            } else {
+                linearRSquaredWarning.innerText = '';
+            }
+            analysisResults.linearRegression = {
+                equation: `y = ${linearReg.m.toFixed(4)}x + ${linearReg.b.toFixed(4)}`,
+                rSquared: linearReg.rSquared.toFixed(4),
+                m: linearReg.m,
+                b: linearReg.b
+            };
+            // 繪製線性回歸圖表
+            drawLinearChart(document.getElementById('linearChart'), chartDataPoints, linearReg, maxConc);
+
+
+            // 執行 4PL 擬合
+            const fourPLReg = fit4PL(xValues, yValues);
+            document.getElementById('fourPLRegressionEquation').innerText = `回歸方程式: y = ${fourPLReg.D.toFixed(4)} + (${fourPLReg.A.toFixed(4)} - ${fourPLReg.D.toFixed(4)}) / (1 + (x / ${fourPLReg.C.toFixed(4)})^${fourPLReg.B.toFixed(4)})`;
+            document.getElementById('fourPLRSquared').innerText = `相關係數 (R²): ${fourPLReg.rSquared.toFixed(4)}`;
+            const fourPLRSquaredWarning = document.getElementById('fourPLRSquaredWarning');
+            if (fourPLReg.rSquared < 0.95) {
+                fourPLRSquaredWarning.innerText = '警告：相關係數 R² 低於 0.95，4PL 檢量線擬合可能不佳。';
+            } else {
+                fourPLRSquaredWarning.innerText = '';
+            }
+            analysisResults.fourPLRegression = {
+                equation: `y = ${fourPLReg.D.toFixed(4)} + (${fourPLReg.A.toFixed(4)} - ${fourPLReg.D.toFixed(4)}) / (1 + (x / ${fourPLReg.C.toFixed(4)})^${fourPLReg.B.toFixed(4)})`,
+                rSquared: fourPLReg.rSquared.toFixed(4),
+                A: fourPLReg.A, B: fourPLReg.B, C: fourPLReg.C, D: fourPLReg.D,
+                inverseFourPLFunction: fourPLReg.inverseFourPLFunction // 儲存函數以便後續使用
+            };
+            // 繪製 4PL 回歸圖表
+            drawFourPLChart(document.getElementById('fourPLChart'), chartDataPoints, fourPLReg, maxConc);
+
+
+            // --- 5. 計算樣品的維生素 C 當量值 ---
+            const sampleVCEquivalentsUl = document.getElementById('sampleVCEquivalents');
+            sampleVCEquivalentsUl.innerHTML = '';
+
+            samples.forEach(sample => {
+                // 線性回歸計算
+                let linearVCEquivalent = '無法計算 (線性回歸無效)';
+                let linearVCEquivalentValue = NaN;
+                if (analysisResults.linearRegression.m !== 0) {
+                    const calculatedX = (sample.scavengingRate - analysisResults.linearRegression.b) / analysisResults.linearRegression.m;
+                    if (!isNaN(calculatedX) && isFinite(calculatedX) && calculatedX >= 0) {
+                        linearVCEquivalent = calculatedX.toFixed(4) + ' mg/mL';
+                        linearVCEquivalentValue = calculatedX;
+                    } else {
+                        linearVCEquivalent = `清除率 (${sample.scavengingRate.toFixed(3)}%) 超出線性模型範圍`;
+                    }
+                }
+                sample.linearVCEquivalent = linearVCEquivalent; // 儲存以供匯出
+                sample.linearVCEquivalentValue = linearVCEquivalentValue; // 儲存數值以供匯出
+                sampleVCEquivalentsUl.innerHTML += `<li>${sample.name} (線性回歸): ${linearVCEquivalent}</li>`;
+
+                // 4PL 回歸計算
+                let fourPLVCEquivalent = '無法計算 (4PL 回歸無效)';
+                let fourPLVCEquivalentValue = NaN;
+                const sampleScavengingRate = sample.scavengingRate;
+                if (sampleScavengingRate >= Math.min(analysisResults.fourPLRegression.A, analysisResults.fourPLRegression.D) && sampleScavengingRate <= Math.max(analysisResults.fourPLRegression.A, analysisResults.fourPLRegression.D)) {
+                    const calculatedX_4PL = analysisResults.fourPLRegression.inverseFourPLFunction(sampleScavengingRate, analysisResults.fourPLRegression);
+                    if (!isNaN(calculatedX_4PL) && isFinite(calculatedX_4PL) && calculatedX_4PL >= 0) {
+                        fourPLVCEquivalent = calculatedX_4PL.toFixed(4) + ' mg/mL';
+                        fourPLVCEquivalentValue = calculatedX_4PL;
+                    } else {
+                        fourPLVCEquivalent = `清除率 (${sampleScavengingRate.toFixed(3)}%) 超出 4PL 模型範圍`;
+                    }
+                } else {
+                    fourPLVCEquivalent = `清除率 (${sampleScavengingRate.toFixed(3)}%) 超出 4PL 模型擬合範圍 (${analysisResults.fourPLRegression.A.toFixed(2)}% - ${analysisResults.fourPLRegression.D.toFixed(2)}%)`;
+                }
+                sample.fourPLVCEquivalent = fourPLVCEquivalent; // 儲存以供匯出
+                sample.fourPLVCEquivalentValue = fourPLVCEquivalentValue; // 儲存數值以供匯出
+                sampleVCEquivalentsUl.innerHTML += `<li>${sample.name} (4PL 回歸): ${fourPLVCEquivalent}</li>`;
+            });
+        }
+
+        /**
+         * 將分析結果匯出為 CSV 檔案。
+         */
+        function exportToCsv() {
+            if (!analysisResults || !analysisResults.samples || analysisResults.samples.length === 0) {
+                showMessageBox('沒有可匯出的分析結果。請先執行分析。');
+                return;
+            }
+
+            let csvContent = "";
+            // 添加 UTF-8 BOM
+            const BOM = "\uFEFF"; 
+            csvContent += BOM;
+
+            // --- 基礎數據 ---
+            csvContent += "基礎數據\n";
+            csvContent += "組別,L,a,b*\n";
+            csvContent += `空白試紙組,${analysisResults.rawInputs.blank.L},${analysisResults.rawInputs.blank.a},${analysisResults.rawInputs.blank.b}\n`;
+            csvContent += `DPPH 紫色組,${analysisResults.rawInputs.dpph.L},${analysisResults.rawInputs.dpph.a},${analysisResults.rawInputs.dpph.b}\n\n`;
+
+            // --- 樣品組分析結果 ---
+            csvContent += "樣品組分析結果\n";
+            csvContent += "樣品名稱,L,a,b*,ΔE (與DPPH比較),校正後ΔE (與空白試紙比較),DPPH清除率 (%),線性回歸維生素C當量 (mg/mL),4PL回歸維生素C當量 (mg/mL)\n";
+            analysisResults.samples.forEach(sample => {
+                const linearVC = isNaN(sample.linearVCEquivalentValue) ? sample.linearVCEquivalent : sample.linearVCEquivalentValue.toFixed(4);
+                const fourPLVC = isNaN(sample.fourPLVCEquivalentValue) ? sample.fourPLVCEquivalent : sample.fourPLVCEquivalentValue.toFixed(4);
+                csvContent += `${sample.name},${sample.L},${sample.a},${sample.b},${sample.deltaE.toFixed(3)},${sample.correctedDeltaE.toFixed(3)},${sample.scavengingRate.toFixed(3)},${linearVC},${fourPLVC}\n`;
+            });
+            csvContent += "\n";
+
+            // --- 維生素 C 標準品數據與結果 ---
+            csvContent += "維生素 C 標準品數據與結果\n";
+            csvContent += "濃度 (mg/mL),L,a,b*,ΔE (與DPPH比較),校正後ΔE (與空白試紙比較),DPPH清除率 (%)\n";
+            analysisResults.vcStandards.forEach(vc => {
+                csvContent += `${vc.conc},${vc.L},${vc.a},${vc.b},${vc.deltaE.toFixed(3)},${vc.correctedDeltaE.toFixed(3)},${vc.scavengingRate.toFixed(3)}\n`;
+            });
+            csvContent += "\n";
+
+            // --- 檢量線回歸結果 ---
+            csvContent += "檢量線回歸結果\n";
+            csvContent += "回歸類型,方程式,R²\n";
+            csvContent += `線性回歸,"${analysisResults.linearRegression.equation}",${analysisResults.linearRegression.rSquared}\n`;
+            csvContent += `4PL回歸,"${analysisResults.fourPLRegression.equation}",${analysisResults.fourPLRegression.rSquared}\n`;
+            csvContent += "\n";
+
+            // 創建 Blob 並下載
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            if (link.download !== undefined) { // 檢查瀏覽器是否支援 download 屬性
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', 'DPPH_Analysis_Results.csv');
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url); // 釋放 URL 物件
+            } else {
+                showMessageBox('您的瀏覽器不支援檔案下載。請嘗試使用其他瀏覽器。');
+            }
+        }
+
+        // 頁面載入完成後自動執行分析，顯示預設數據的結果
+        window.onload = analyzeDPPH;
+    </script>
+</body>
+</html>
